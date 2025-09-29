@@ -1,0 +1,6 @@
+{
+    "pythonanywhere_username": "SEU_USERNAME_AQUI",
+    "pythonanywhere_api_token": "SEU_API_TOKEN_AQUI",
+    "pythonanywhere_db_path": "/home/SEU_USERNAME_AQUI/caminho/no/servidor/protocols.db",
+    "pythonanywhere_webapp_domain": "SEU_USERNAME_AQUI.pythonanywhere.com"
+}

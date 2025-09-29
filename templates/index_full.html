@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Visualizador de Protocolos (Completo)</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <div class="left">
+            <h3>Protocolos</h3>
+            <button class="filter-btn" id="btn-keyword-filter" style="background-color: #fff1b3; border-color: #e6c429;">Filtrar "Bom Retiro"</button>
+            <hr style="margin: 8px 0;">
+            <button class="filter-btn selected" id="btn-all" data-filter="all">Todos</button>
+            <button class="filter-btn" id="btn-arch" data-filter="arch">Arquivados (+)</button>
+            <button class="filter-btn" id="btn-notarch" data-filter="notarch">Não arquivados</button>
+            <button class="filter-btn" id="btn-amabre" data-filter="amabre">AMABRE</button>
+            <button class="filter-btn remove-main-btn" onclick="removerProtocoloSelecionado()" style="background:#ffdddd; color:#900; border-color:#d00; float:right;">Remover</button>
+            <button class="filter-btn export-btn" onclick="exportarProtocolos()" style="background:#e0ffe0; color:#060; border-color:#080; float:right;">Exportar</button>
+            <div style="margin-top:10px"></div>
+            <label for="input-busca">Buscar texto:</label>
+            <div class="search-container" style="display: flex; width: 95%; margin-bottom: 8px;">
+                <input type="text" id="input-busca" placeholder="Digite para buscar..." style="flex-grow: 1;">
+                <button id="btn-buscar" style="margin-left: 4px;">Buscar</button>
+            </div>
+            <div id="protocol-list">
+                <!-- Protocol list will be rendered here by JavaScript -->
+            </div>
+        </div>
+        <div class="right" id="detail">
+            <em>Selecione um protocolo à esquerda...</em>
+        </div>
+    </div>
+    <script src="/static/script_full.js"></script>
+</body>
+</html>

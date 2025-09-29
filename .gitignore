@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Ambientes virtuais
+venv/
+.env/
+
+# Logs
+*.log
+
+# Banco de dados e arquivos grandes
+protocols.db
+
+# Arquivos do sistema operacional
+.DS_Store
+desktop.ini
+
+# Jupyter
+.ipynb_checkpoints/
+
+# VS Code
+.vscode/
+
+# Configuration files with secrets
+deploy_config.json

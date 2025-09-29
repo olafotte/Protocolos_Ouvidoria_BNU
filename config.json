@@ -1,0 +1,29 @@
+{
+    "database_name": "protocols.db",
+    "log_file": "protocol_scraper.log",
+    "base_url": "https://grp.blumenau.sc.gov.br/grp/acessoexterno/programaAcessoExterno.faces?codigo=670111",
+    "hardcoded_years": {
+        "2020": 13627,
+        "2021": 16971,
+        "2022": 14141,
+        "2023": 17109,
+        "2024": 17828
+    },
+    "current_year": 2025,
+    "max_concurrent_tasks": 50,
+    "lista_original": [
+        "AMABRE", "Bom Retiro", "Hermann Hering", "Recife", "Carijós",
+        "Palhoça", "Augusto Otte", "Porto Alegre", "Ernesto Emmendoerfer", "Tiradentes", "Gertrud Gross Hering",
+        "Klara Hering", "Vitor Hering", "Cuiabá", "Richard Holetz", "Francisco Knoch", "Teresina", "Belém",
+        "Oswaldo Berndt", "Voluntários da Pátria", "Alexandre Flemming", "Sebastian Fischer", "Inconfidentes"
+    ],
+    "familias": {
+        "Alexandre Flemming": ["Alexander Flemming", "Alexandre Flemming", "Alexander Fleming", "Alexandre Fleming"],
+        "carijos": ["carijos", "carijo"],
+        "Vitor Hering": ["victor hering", "vitor hering"],
+        "Klara Hering": ["klara hering", "clara hering"],
+        "Ernesto Emmendoerfer": ["ernesto emmendoerfer", "ernesto emendoerfer"],
+        "Gertrud Gross Hering": ["gertrud gross hering", "gertrud gros hering", "gertrud hering", "gertrudes gross"],
+        "Teresina": ["teresina", "terezina"]
+    }
+}
