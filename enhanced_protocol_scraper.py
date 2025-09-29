@@ -179,30 +179,81 @@ class ProtocolScraper:
             driver.quit()
         return content
 
+    def _check_protocol_exists(self, driver, wait, year, number):
+        """A dedicated method for the binary search to check if a protocol exists."""
+        try:
+            # This is slow, but safer than trying to navigate 'back' on a complex JS page
+            driver.get(self.base_url)
+            
+            wait.until(EC.presence_of_element_located(Locators.IFRAME))
+            driver.switch_to.frame(driver.find_element(*Locators.IFRAME))
+
+            wait.until(EC.presence_of_element_located(Locators.EXERCICIO_INPUT)).send_keys(str(year))
+            wait.until(EC.presence_of_element_located(Locators.NUMERO_INPUT)).send_keys(str(number))
+            Select(wait.until(EC.presence_of_element_located(Locators.TIPO_PROTOCOLO_DROPDOWN))).select_by_index(9)
+            
+            wait.until(EC.invisibility_of_element_located(Locators.OVERLAY_CARREGANDO))
+            wait.until(EC.element_to_be_clickable(Locators.BOTAO_LOCALIZAR)).click()
+
+            # A short wait for the result. A successful result should contain the protocol number.
+            # If it times out, we'll check for the error message.
+            WebDriverWait(driver, 5).until(
+                EC.text_to_be_present_in_element(Locators.RESULTADO_FIELDSET, f"{year}/{number}")
+            )
+            # If the above line doesn't time out, the protocol exists.
+            return True
+        except TimeoutException:
+            # The success text didn't appear. Check for the explicit "not found" message.
+            try:
+                error_text = driver.find_element(*Locators.RESULTADO_FIELDSET_ERRO).text
+                if "Protocolo não localizado" in error_text:
+                    return False # Explicitly not found
+            except NoSuchElementException:
+                # If we can't even find the error container, it's definitely not found.
+                return False
+            # If we find the container but not the specific message, or something else goes wrong,
+            # it's safer to assume it's not found.
+            return False
+        except Exception as e:
+            logging.warning(f"An error occurred in _check_protocol_exists for {year}/{number}: {e}")
+            # Any other exception means we can't be sure, so assume it doesn't exist.
+            return False
+
     def find_latest_protocol_number(self, year):
         logging.info(f"Starting binary search for the latest protocol in {year}.")
         driver = self._init_driver()
+        # Use a longer wait for general navigation, but the check method uses a shorter one.
+        wait = WebDriverWait(driver, 10) 
         low, high = 1, 30000
         latest_found = 0
 
-        with tqdm(total=high, desc=f"Binary searching in {year}") as pbar:
-            while low <= high:
-                mid = (low + high) // 2
-                pbar.set_description(f"Testing {mid}")
-                try:
-                    # Reusing the scrape logic, but we don't care about the content here
-                    result_content = self._perform_scrape(year, mid)
-                    if "Protocolo não localizado" not in result_content and "Timeout:" not in result_content:
+        try:
+            with tqdm(total=high, desc=f"Binary searching in {year}") as pbar:
+                # Adjust the range to avoid testing 0 and to have a more realistic start
+                if low == 0: low = 1
+
+                while low <= high:
+                    mid = (low + high) // 2
+                    if mid == 0: # Skip protocol 0
+                        low = 1
+                        continue
+
+                    pbar.set_description(f"Testing {mid}")
+                    
+                    if self._check_protocol_exists(driver, wait, year, mid):
+                        # Found one, it could be the latest. Try for a higher number.
                         latest_found = mid
                         low = mid + 1
                     else:
+                        # Not found, the latest must be in the lower half.
                         high = mid - 1
-                except Exception:
-                    high = mid - 1
-                pbar.n = latest_found
-                pbar.refresh()
+                    
+                    # Update progress bar
+                    pbar.n = latest_found
+                    pbar.refresh()
+        finally:
+            driver.quit()
         
-        driver.quit()
         logging.info(f"Found latest protocol for {year}: {latest_found}")
         return latest_found
 
