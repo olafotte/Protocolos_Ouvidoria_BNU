@@ -1,4 +1,5 @@
 let keywordFilterActive = false;
+let sortOrder = 'asc'; // 'asc' or 'desc'
 
 // --- Data Fetching and State Management ---
 
@@ -31,10 +32,13 @@ function updateView() {
         params.push('filter_keywords=true');
     }
 
+    // Always add sort order
+    params.push(`sort_order=${sortOrder}`);
+
     const queryString = params.length > 0 ? `?${params.join('&')}`: '';
 
     // Show loading indicator
-    document.getElementById('detail').innerHTML = '<em>Carregando...</em>';
+    document.getElementById('protocol-list').innerHTML = '<em>Buscando protocolos...</em>';
 
     fetch(`/api/protocols${queryString}`)
         .then(response => response.json())
@@ -44,7 +48,7 @@ function updateView() {
         })
         .catch(error => {
             console.error('Error fetching protocols:', error);
-            document.getElementById('detail').innerHTML = '<em>Erro ao carregar protocolos.</em>';
+            document.getElementById('protocol-list').innerHTML = '<em>Erro ao carregar protocolos.</em>';
         });
 }
 
@@ -70,7 +74,8 @@ function renderProtocolList(protocols) {
     listDiv.innerHTML = ''; // Clear existing list
 
     if (protocols.length === 0) {
-        document.getElementById('detail').innerHTML = '<em>Nenhum protocolo encontrado.</em>';
+        listDiv.innerHTML = '<em>Nenhum protocolo encontrado.</em>';
+        document.getElementById('detail').innerHTML = '<em>Selecione um protocolo à esquerda...</em>';
         return;
     }
 
@@ -101,13 +106,25 @@ function renderProtocolList(protocols) {
  */
 function showProtocolo(id) {
     const detail = document.getElementById('detail');
-    detail.innerHTML = '<em>Carregando...</em>';
+    detail.innerHTML = '<em>Carregando protocolo...</em>';
     const search = document.getElementById('input-busca').value.trim();
 
     fetch(`/protocolo?id=${encodeURIComponent(id)}&search=${encodeURIComponent(search)}`)
         .then(r => r.json())
         .then(data => {
-            detail.innerHTML = `<pre>${data.html}</pre>`;
+            let metaHtml = '<div class="protocol-meta">';
+            if (data.last_update) {
+                metaHtml += `<span><strong>Última Atualização:</strong> ${data.last_update}</span>`;
+            }
+            if (data.arquivado) {
+                const statusClass = data.arquivado === 'yes' ? 'archived' : 'not-archived';
+                const statusText = data.arquivado === 'yes' ? 'Sim' : 'Não';
+                metaHtml += `<span><strong>Arquivado:</strong> <span class="status-${statusClass}">${statusText}</span></span>`;
+            }
+            metaHtml += '</div>';
+
+            detail.innerHTML = metaHtml + `<pre>${data.html}</pre>`;
+            
             // Highlight the selected item in the list
             document.querySelectorAll('.proto-item').forEach(e => e.classList.remove('selected'));
             const el = document.getElementById(`item-${id.replace('/', '-')}`);
@@ -198,6 +215,42 @@ function removerProtocoloSelecionado() {
 window.onload = function () {
     const searchInput = document.getElementById('input-busca');
     const searchBtn = document.getElementById('btn-buscar');
+    const sortBtn = document.getElementById('btn-sort');
+    const protocolListDiv = document.getElementById('protocol-list');
+    const instructionsDiv = document.getElementById('initial-instructions');
+
+    // This function starts the actual data loading process
+    function startLoading() {
+        // Hide instructions and show the initial empty state for the detail view
+        if (instructionsDiv) {
+            instructionsDiv.style.display = 'none';
+        }
+        document.getElementById('detail').innerHTML = '<em>Selecione um protocolo à esquerda...</em>';
+
+        // Show loading message in the protocol list
+        protocolListDiv.innerHTML = '<em>Carregando...</em>';
+
+        // Fetch last update time and then load initial data
+        fetch('/api/db_last_update')
+            .then(response => response.json())
+            .then(data => {
+                if (data.last_update && data.last_update !== 'Não encontrado') {
+                    protocolListDiv.innerHTML = `<em>Carregando banco de dados atualizado em ${data.last_update}</em>`;
+                }
+                // Wait 2 seconds before loading the data to show the message
+                setTimeout(updateView, 2000);
+            })
+            .catch(error => {
+                console.error('Error fetching db update time:', error);
+                // Still load data even if fetching time fails
+                updateView();
+            });
+    }
+
+    const startButton = document.getElementById('start-button');
+
+    // Show instructions and wait for the user to click the button
+    startButton.addEventListener('click', startLoading);
 
     function performSearch() {
         // When user searches, reset category filters to 'All'
@@ -212,6 +265,12 @@ window.onload = function () {
         if (event.key === 'Enter') {
             performSearch();
         }
+    });
+
+    sortBtn.addEventListener('click', () => {
+        sortOrder = sortOrder === 'asc' ? 'desc' : 'asc';
+        sortBtn.textContent = sortOrder === 'asc' ? 'A-Z' : 'Z-A';
+        updateView();
     });
     
     // Event listeners for filter buttons
@@ -242,7 +301,4 @@ window.onload = function () {
             }
         }
     });
-
-    // Initial data load
-    updateView();
 };

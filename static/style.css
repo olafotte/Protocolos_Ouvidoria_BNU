@@ -10,3 +10,33 @@ pre { white-space: pre-wrap; word-break: break-word; }
 .filter-btn.selected { background: #b3d1ff; border-color: #0057b8; }
 .remove-btn { margin-left: 10px, 2px 6px; border: none; border-radius: 4px; background: #ffcccc; color: #d9534f; cursor: pointer; }
 .remove-btn:hover { background: #f5c6cb; }
+
+.protocol-meta {
+    background-color: #f0f0f0;
+    padding: 10px 15px;
+    border-radius: 5px;
+    margin-bottom: 15px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.9em;
+    border: 1px solid #ddd;
+}
+
+.protocol-meta span {
+    margin-right: 20px;
+}
+
+.protocol-meta span:last-child {
+    margin-right: 0;
+}
+
+.status-archived {
+    color: #28a745;
+    font-weight: bold;
+}
+
+.status-not-archived {
+    color: #dc3545;
+    font-weight: bold;
+}

@@ -3,10 +3,11 @@ import asyncio
 import json
 import logging
 import os
+import re
 import sqlite3
 import unicodedata
 from collections import defaultdict
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from selenium import webdriver
 from selenium.common.exceptions import TimeoutException, NoSuchElementException
@@ -43,6 +44,31 @@ def contains_any_keyword(block, keywords):
         return False
     block_norm = remover_acentos(block).lower()
     return any(word in block_norm for word in keywords)
+
+def find_and_format_dates(content):
+    """Finds all dd/mm/yyyy dates in a string and returns the latest one in yyyy-mm-dd format."""
+    if not content:
+        return None
+
+    date_pattern = re.compile(r'(\d{2}/\d{2}/\d{4})')
+    found_dates = date_pattern.findall(content)
+
+    if not found_dates:
+        return None
+
+    latest_date = None
+    for date_str in found_dates:
+        try:
+            current_date = datetime.strptime(date_str, '%d/%m/%Y')
+            if latest_date is None or current_date > latest_date:
+                latest_date = current_date
+        except ValueError:
+            continue
+
+    if latest_date:
+        return latest_date.strftime('%Y-%m-%d')
+    
+    return None
 
 # --- Configuration and Logging Setup ---
 
@@ -97,6 +123,8 @@ class DatabaseManager:
                 year INTEGER,
                 number INTEGER,
                 content TEXT,
+                Arquivado TEXT,
+                Last_update TEXT,
                 retrieved_at TIMESTAMP,
                 PRIMARY KEY (year, number)
             )
@@ -107,10 +135,18 @@ class DatabaseManager:
         rows = self.fetchall('SELECT number FROM protocols WHERE year = ?', (year,))
         return {row[0] for row in rows}
 
-    def insert_protocol(self, year, number, content):
+    def get_protocols_to_update(self, year, days=90):
+        ninety_days_ago = (datetime.now() - timedelta(days=days)).strftime('%Y-%m-%d')
+        rows = self.fetchall(
+            "SELECT number FROM protocols WHERE year = ? AND Arquivado = 'no' AND Last_update >= ?",
+            (year, ninety_days_ago)
+        )
+        return {row[0] for row in rows}
+
+    def insert_protocol(self, year, number, content, arquivado, last_update):
         self.execute(
-            'INSERT OR REPLACE INTO protocols (year, number, content, retrieved_at) VALUES (?, ?, ?, ?)',
-            (year, number, content, datetime.now())
+            'INSERT OR REPLACE INTO protocols (year, number, content, Arquivado, Last_update, retrieved_at) VALUES (?, ?, ?, ?, ?, ?)',
+            (year, number, content, arquivado, last_update, datetime.now())
         )
 
 # --- Web Scraping ---
@@ -141,19 +177,21 @@ class ProtocolScraper:
     async def scrape_protocol(self, session, year, number):
         loop = asyncio.get_event_loop()
         try:
-            content = await loop.run_in_executor(
+            content, arquivado, last_update = await loop.run_in_executor(
                 None, self._perform_scrape, year, number
             )
-            return year, number, content
+            return year, number, content, arquivado, last_update
         except Exception as e:
             logging.error(f"Error scraping {year}/{number}: {e}")
-            return year, number, f"SCRAPE_ERROR: {e}"
+            return year, number, f"SCRAPE_ERROR: {e}", "no", None
 
     def _perform_scrape(self, year, number):
         driver = self._init_driver()
         wait = WebDriverWait(driver, 10)
         driver.get(self.base_url)
         content = "Default error content."
+        arquivado = "no"
+        last_update = None
         try:
             wait.until(EC.presence_of_element_located(Locators.IFRAME))
             driver.switch_to.frame(driver.find_element(*Locators.IFRAME))
@@ -168,6 +206,11 @@ class ProtocolScraper:
             wait.until(EC.text_to_be_present_in_element(Locators.RESULTADO_FIELDSET, f"{year}/{number}"))
             content = driver.find_element(*Locators.RESULTADO_FIELDSET).text
 
+            if "Conforme andamento arquiva-se o protocolo." in content:
+                arquivado = "yes"
+            
+            last_update = find_and_format_dates(content)
+
         except TimeoutException:
             try:
                 content = driver.find_element(*Locators.RESULTADO_FIELDSET_ERRO).text
@@ -177,7 +220,7 @@ class ProtocolScraper:
             content = f"An unexpected error occurred: {e}"
         finally:
             driver.quit()
-        return content
+        return content, arquivado, last_update
 
     def _check_protocol_exists(self, driver, wait, year, number):
         """A dedicated method for the binary search to check if a protocol exists."""
@@ -299,14 +342,21 @@ async def main():
                     continue
 
                 all_protocols = set(range(1, max_num + 1))
-                existing_protocols = set() if args.force_update else db.get_existing_protocols(year)
-                protocols_to_scrape = sorted(list(all_protocols - existing_protocols))
+                
+                if args.force_update:
+                    protocols_to_scrape = sorted(list(all_protocols))
+                else:
+                    existing_protocols = db.get_existing_protocols(year)
+                    new_protocols = all_protocols - existing_protocols
+                    protocols_to_update = db.get_protocols_to_update(year,60)
+                    protocols_to_scrape = sorted(list(new_protocols.union(protocols_to_update)))
+
 
                 if not protocols_to_scrape:
-                    logging.info(f"No new protocols to scrape for {year}.")
+                    logging.info(f"No new or unarchived protocols to scrape for {year}.")
                     continue
 
-                logging.info(f"Found {len(protocols_to_scrape)} new protocols to scrape for {year}.")
+                logging.info(f"Found {len(protocols_to_scrape)} protocols to scrape for {year}.")
                 all_newly_scraped[year] = protocols_to_scrape
                 
                 tasks = []
@@ -319,8 +369,10 @@ async def main():
                     tasks.append(scrape_with_sem(number))
 
                 for future in asyncio_tqdm.as_completed(tasks, total=len(tasks), desc=f"Scraping {year}"):
-                    res_year, res_number, res_content = await future
-                    db.insert_protocol(res_year, res_number, res_content)
+                    res_year, res_number, res_content, res_arquivado, res_last_update = await future
+                    if not res_last_update:
+                        res_last_update = datetime.now().strftime('%Y-%m-%d')
+                    db.insert_protocol(res_year, res_number, res_content, res_arquivado, res_last_update)
             
             # --- Analyze newly scraped protocols and generate Update.txt ---
             logging.info("Analyzing newly scraped protocols for keyword matches...")

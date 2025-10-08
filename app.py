@@ -55,15 +55,15 @@ def get_db_connection():
     conn.row_factory = sqlite3.Row
     return conn
 
-def get_single_protocol_content(pid):
+def get_single_protocol_details(pid):
     try:
         year, number = pid.split('/')
         conn = get_db_connection()
         cursor = conn.cursor()
-        cursor.execute("SELECT content FROM protocols WHERE year = ? AND number = ?", (int(year), int(number)))
+        cursor.execute("SELECT content, Arquivado, Last_update FROM protocols WHERE year = ? AND number = ?", (int(year), int(number)))
         row = cursor.fetchone()
         conn.close()
-        return row['content'] if row else None
+        return row
     except (ValueError, IndexError):
         return None
 
@@ -99,59 +99,68 @@ def api_protocols():
     conn = get_db_connection()
     cursor = conn.cursor()
 
-    # --- Determine base filter (keywords) ---
-    keyword_filter_active = request.args.get('filter_keywords') == 'true'
-    base_clauses = []
-    base_params = []
-    if keyword_filter_active:
-        keyword_clauses_list = [f"content LIKE ?" for _ in LISTA_NORMALIZADA]
-        base_clauses.append("(" + " OR ".join(keyword_clauses_list) + ")")
-        base_params.extend([f"%{kw}%" for kw in LISTA_NORMALIZADA])
+    search_term = request.args.get('search', '').strip()
+    sort_order = request.args.get('sort_order', 'asc').lower()
+    if sort_order not in ['asc', 'desc']:
+        sort_order = 'asc'
 
-    # --- Calculate Totals ---
-    totals_where_sql = "WHERE " + " AND ".join(base_clauses) if base_clauses else ""
+    # --- Base Query ---
+    from_clause = "FROM protocols p"
+    where_clauses = []
+    params = []
+    order_by_clause = f"ORDER BY p.year {sort_order}, p.number {sort_order}"
+
+    if search_term:
+        from_clause = "FROM protocols_fts fts JOIN protocols p ON fts.rowid = p.rowid"
+        where_clauses.append("fts.content MATCH ?")
+        params.append(search_term)
+
+    # --- Keyword Filter ---
+    if request.args.get('filter_keywords') == 'true':
+        keyword_clauses_list = [f"p.content LIKE ?" for _ in LISTA_NORMALIZADA]
+        where_clauses.append("(" + " OR ".join(keyword_clauses_list) + ")")
+        params.extend([f"%{kw}%" for kw in LISTA_NORMALIZADA])
+
+    # --- Status Filter ---
+    status = request.args.get('status')
+    if status == 'arch':
+        where_clauses.append("p.Arquivado = 'yes'")
+    elif status == 'notarch':
+        where_clauses.append("p.Arquivado = 'no'")
+
+    # --- Amabre Filter ---
+    if request.args.get('amabre') == 'true':
+        where_clauses.append("p.content LIKE '%amabre%'")
+
+    # --- Build Final Query ---
+    where_sql = "WHERE " + " AND ".join(where_clauses) if where_clauses else ""
+    
+    # --- Get Total Counts ---
+    # We need to get the totals from the same query to respect all filters
     totals_sql = f"""
         SELECT 
-            COUNT(*) as todos,
-            SUM(CASE WHEN content LIKE '%arquiva-se o protocolo%' THEN 1 ELSE 0 END) as arch,
-            SUM(CASE WHEN content LIKE '%amabre%' THEN 1 ELSE 0 END) as amabre
-        FROM protocols
-        {totals_where_sql}
+            COUNT(p.rowid) as todos,
+            SUM(CASE WHEN p.Arquivado = 'yes' THEN 1 ELSE 0 END) as arch,
+            SUM(CASE WHEN p.content LIKE '%amabre%' THEN 1 ELSE 0 END) as amabre
+        {from_clause}
+        {where_sql}
     """
-    cursor.execute(totals_sql, base_params)
-    totals_row = cursor.fetchone()
     
+    # We need a separate query for totals because the main query might have a LIMIT/OFFSET later
+    total_cursor = conn.cursor()
+    total_cursor.execute(totals_sql, params)
+    totals_row = total_cursor.fetchone()
+    total_cursor.close()
+
     total_todos = totals_row['todos'] or 0
     total_arch = totals_row['arch'] or 0
     total_amabre = totals_row['amabre'] or 0
     total_notarch = total_todos - total_arch
-
-    # --- Filter Results for Display ---
-    other_clauses = []
-    other_params = []
-
-    search_term = request.args.get('search', '').strip()
-    if search_term:
-        other_clauses.append("content LIKE ?")
-        other_params.append(f"%{search_term}%")
-
-    status = request.args.get('status')
-    if status == 'arch':
-        other_clauses.append("content LIKE '%arquiva-se o protocolo%'")
-    elif status == 'notarch':
-        other_clauses.append("content NOT LIKE '%arquiva-se o protocolo%'")
     
-    if request.args.get('amabre') == 'true':
-        other_clauses.append("content LIKE '%amabre%'")
-
-    # Combine all clauses and params
-    final_clauses = base_clauses + other_clauses
-    final_params = base_params + other_params
+    # --- Get Results ---
+    results_sql = f"SELECT p.year, p.number, p.Arquivado {from_clause} {where_sql} {order_by_clause}"
     
-    results_where_sql = "WHERE " + " AND ".join(final_clauses) if final_clauses else ""
-    results_sql = f"SELECT year, number, content FROM protocols {results_where_sql} ORDER BY year, number"
-    
-    cursor.execute(results_sql, final_params)
+    cursor.execute(results_sql, params)
     rows = cursor.fetchall()
     conn.close()
 
@@ -166,7 +175,7 @@ def api_protocols():
             'id': pid,
             'ano': row['year'],
             'numero': str(row['number']).zfill(5),
-            'has_archivado': 'arquiva-se o protocolo' in (row['content'] or '').lower(),
+            'has_archivado': row['Arquivado'] == 'yes',
         })
 
     return jsonify({
@@ -183,10 +192,22 @@ def api_protocols():
 def protocolo_detail():
     pid = request.args.get('id')
     search = request.args.get('search', '').strip()
-    content = get_single_protocol_content(pid)
+    details = get_single_protocol_details(pid)
 
-    if not content:
+    if not details:
         return jsonify({'html': '<em>Protocolo não encontrado.</em>'})
+
+    content = details['content']
+    arquivado = details['Arquivado']
+    last_update = details['Last_update']
+
+    # Format date for display
+    if last_update:
+        try:
+            date_obj = datetime.datetime.strptime(last_update, '%Y-%m-%d')
+            last_update = date_obj.strftime('%d/%m/%Y')
+        except (ValueError, TypeError):
+            last_update = "Data inválida"
 
     # Highlight search term and the main keyword list
     palavras_destaque = LISTA_NORMALIZADA.copy()
@@ -194,7 +215,11 @@ def protocolo_detail():
         palavras_destaque.append(remover_acentos(search).lower())
         
     html = highlight(content, palavras_destaque)
-    return jsonify({'html': html})
+    return jsonify({
+        'html': html,
+        'arquivado': arquivado,
+        'last_update': last_update
+    })
 
 @app.route('/remover', methods=['POST'])
 def remover():
@@ -213,9 +238,9 @@ def exportar():
 
     blocos = []
     for pid in sorted(list(ids)):
-        content = get_single_protocol_content(pid)
-        if content:
-            blocos.append(f"---{pid}---{content}")
+        details = get_single_protocol_details(pid)
+        if details and details['content']:
+            blocos.append(f"---\"{pid}\"---{details['content']}")
             
     file_content = '\n\n'.join(blocos)
     now = datetime.datetime.now()
@@ -225,6 +250,16 @@ def exportar():
     buf.seek(0)
     
     return send_file(buf, as_attachment=True, download_name=filename, mimetype='text/plain')
+
+@app.route('/api/db_last_update')
+def db_last_update():
+    try:
+        mtime = os.path.getmtime(DB_NAME)
+        dt_object = datetime.datetime.fromtimestamp(mtime)
+        formatted_date = dt_object.strftime('%d/%m/%Y %H:%M')
+        return jsonify({'last_update': formatted_date})
+    except FileNotFoundError:
+        return jsonify({'last_update': 'Não encontrado'})
 
 if __name__ == '__main__':
     app.run(debug=True, port=5001) # Run on a different port to avoid conflict

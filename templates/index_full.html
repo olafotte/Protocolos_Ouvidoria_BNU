@@ -21,13 +21,42 @@
             <div class="search-container" style="display: flex; width: 95%; margin-bottom: 8px;">
                 <input type="text" id="input-busca" placeholder="Digite para buscar..." style="flex-grow: 1;">
                 <button id="btn-buscar" style="margin-left: 4px;">Buscar</button>
+                <button id="btn-sort" style="margin-left: 4px;">A-Z</button>
             </div>
             <div id="protocol-list">
                 <!-- Protocol list will be rendered here by JavaScript -->
             </div>
         </div>
         <div class="right" id="detail">
-            <em>Selecione um protocolo à esquerda...</em>
+            <div id="initial-instructions" style="padding: 15px; border: 1px solid #ccc; border-radius: 5px; background-color: #f9f9f9;">
+                <h2 style="margin-top: 0;">Bem-vindo ao Visualizador de Protocolos!</h2>
+                <p>Este site permite que você pesquise e visualize protocolos da ouvidoria.</p>
+                
+                <h4>Como usar:</h4>
+                <ul>
+                    <li>A lista de protocolos disponíveis aparece à esquerda. Clique em um item para ver seu conteúdo aqui.</li>
+                </ul>
+        
+                <h4>Botões de Filtro:</h4>
+                <ul>
+                    <li><strong>Filtrar "Bom Retiro":</strong> Mostra apenas protocolos que contêm palavras-chave relacionadas a "Bom Retiro".</li>
+                    <li><strong>Todos / Arquivados / Não arquivados / AMABRE:</strong> Filtra a lista de protocolos pelo seu status.</li>
+                    <li><strong>Exportar:</strong> Exporta os protocolos atualmente visíveis na lista para um arquivo de texto.</li>
+                    <li><strong>Remover:</strong> Remove o protocolo selecionado da visualização (não o apaga do banco de dados).</li>
+                </ul>
+        
+                <h4>Busca Inteligente:</h4>
+                <p>A caixa de busca é poderosa! Você pode usar operadores para refinar sua pesquisa:</p>
+                <ul>
+                    <li><code>palavra1 palavra2</code> - Encontra protocolos que contêm <strong>ambas</strong> as palavras (AND).</li>
+                    <li><code>"uma frase exata"</code> - Busca pela frase inteira entre aspas.</li>
+                    <li><code>palavra1 OR palavra2</code> - Encontra protocolos que contêm <strong>pelo menos uma</strong> das palavras.</li>
+                    <li><code>palavra*</code> - Busca por palavras que <strong>começam com</strong> "palavra" (ex: "prot*" encontra "protocolo", "protocolos", etc).</li>
+                </ul>
+                <div style="text-align: center; margin-top: 20px;">
+                    <button id="start-button" class="filter-btn">OK</button>
+                </div>
+            </div>
         </div>
     </div>
     <script src="/static/script_full.js"></script>
