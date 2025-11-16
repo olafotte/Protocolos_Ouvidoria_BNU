@@ -1,41 +1,6 @@
 import subprocess
 import sys
 import time
-import requests
-
-# ------------------------------------------------------------------
-# --- CONFIGURAÇÃO DO WEBHOOK ---
-# <<< NOVO: Coloque a URL secreta do seu webhook do PythonAnywhere aqui
-WEBHOOK_URL = "http://olafBr.pythonanywhere.com/executar_limpeza_arquivos"
-# -----------------------------------------------------------------
-
-# <<< NOVO: Função para chamar o webhook de limpeza >>>
-def call_cleanup_webhook():
-    """Chama o webhook de limpeza no PythonAnywhere."""
-    
-    # Verifica se a URL foi configurada
-    if not WEBHOOK_URL.startswith("http"):
-        print("\n!!! URL do Webhook não configurada. Pulei a etapa de limpeza. !!!")
-        print("Por favor, configure a variavel WEBHOOK_URL no topo do script.")
-        return
-
-    print("\n--- Solicitando limpeza de arquivos no servidor (webhook)... ---")
-    try:
-        # Chama a URL do webhook. O timeout é importante.
-        response = requests.get(WEBHOOK_URL, timeout=15)
-        
-        # Verifica se o servidor respondeu com sucesso (código 2xx)
-        if 200 <= response.status_code < 300:
-            print(f"--- Limpeza no servidor concluida com sucesso. ---")
-            print(f"Resposta do servidor: {response.text}")
-        else:
-            # Se o servidor respondeu com um erro (4xx, 5xx)
-            print(f"!!! Erro no servidor durante a limpeza (Código {response.status_code}). !!!")
-            print(f"Resposta do servidor: {response.text}")
-    
-    except requests.exceptions.RequestException as e:
-        # Erros de rede, DNS, timeout, etc.
-        print(f"!!! ERRO de conexão ao tentar chamar o webhook: {e} !!!")
 
 def run_script(script_path, *args):
     """Executa um script Python e retorna True em sucesso, False em erro."""
@@ -79,8 +44,7 @@ def main():
     
     if all_success:
         print("\n*** Todos os scripts foram executados com sucesso! ***")
-        call_cleanup_webhook()
-
+        
 def countdown_progress_bar(duration_seconds):
     """Exibe uma barra de progresso e contagem regressiva."""
     print(f"\nAguardando 24 horas para a proxima execucao...")

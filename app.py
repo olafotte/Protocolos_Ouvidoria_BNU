@@ -6,7 +6,6 @@ import re
 import unicodedata
 import sqlite3
 import json
-import subprocess
 
 app = Flask(__name__)
 
@@ -262,43 +261,6 @@ def db_last_update():
     except FileNotFoundError:
         return jsonify({'last_update': 'Não encontrado'})
 
-
-@app.route('/executar_limpeza_arquivos')
-def executar_limpeza_arquivos():
-    
-    # --- IMPORTANTE: Configure seu caminho aqui ---
-    # Use o caminho ABSOLUTO para a pasta do seu projeto
-    # Ex: /home/SeuUsuario/meu_projeto_flask
-    caminho_do_projeto = "/home/olafBr/Protocolos_Ouvidoria_BNU"   
-    
-    # O comando Bash que você quer executar
-    comando_bash = "cat protocols.db.part* > protocols.db && rm protocols.db.part*"
-
-    try:
-        # Verifica se o diretório existe
-        if not os.path.isdir(caminho_do_projeto):
-            return f"Erro: O diretório '{caminho_do_projeto}' não foi encontrado.", 500
-
-        # Executa o comando
-        # 'cwd' (current working directory) garante que o comando rode na pasta certa
-        # 'shell=True' é necessário para usar curingas (*) e '&&'
-        # 'check=True' fará o Python gerar um erro se o comando falhar
-        subprocess.run(
-            comando_bash, 
-            shell=True, 
-            check=True, 
-            cwd=caminho_do_projeto
-        )
-        
-        # Se tudo deu certo, retorna uma mensagem de sucesso
-        return "Tarefa executada com sucesso: Arquivos combinados e limpos.", 200
-
-    except subprocess.CalledProcessError as e:
-        # Se o comando falhar (ex: 'cat' não achou arquivos)
-        return f"Erro ao executar o comando no servidor: {e}", 500
-    except Exception as e:
-        # Outros erros (ex: permissão)
-        return f"Um erro inesperado ocorreu: {str(e)}", 500
 
 if __name__ == '__main__':
     app.run(debug=True, port=5001) # Run on a different port to avoid conflict
