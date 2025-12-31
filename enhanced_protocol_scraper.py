@@ -155,6 +155,7 @@ class Locators:
     IFRAME = (By.TAG_NAME, "iframe")
     EXERCICIO_INPUT = (By.ID, "form:exercicioSituacaoNumero:field")
     NUMERO_INPUT = (By.ID, "form:numeroSituacaoNumero:field")
+    VOLUME_INPUT = (By.ID, "form:volumeSituacaoNumero:field")
     TIPO_PROTOCOLO_DROPDOWN = (By.ID, "form:tipoProtocoloSituacaoNumero:select")
     BOTAO_LOCALIZAR = (By.ID, "form:j_id_42:0:j_id_46")
     OVERLAY_CARREGANDO = (By.CLASS_NAME, "carregandoFundo")
@@ -171,6 +172,7 @@ class ProtocolScraper:
         options = webdriver.ChromeOptions()
         if self.headless:
             options.add_argument("--headless")
+            pass
         options.add_argument("--log-level=3")
         return webdriver.Chrome(service=service, options=options)
 
@@ -198,7 +200,8 @@ class ProtocolScraper:
 
             wait.until(EC.presence_of_element_located(Locators.EXERCICIO_INPUT)).send_keys(str(year))
             wait.until(EC.presence_of_element_located(Locators.NUMERO_INPUT)).send_keys(str(number))
-            Select(wait.until(EC.presence_of_element_located(Locators.TIPO_PROTOCOLO_DROPDOWN))).select_by_index(9)
+            wait.until(EC.presence_of_element_located(Locators.VOLUME_INPUT)).send_keys(str(1))
+            Select(wait.until(EC.presence_of_element_located(Locators.TIPO_PROTOCOLO_DROPDOWN))).select_by_index(10)
             
             wait.until(EC.invisibility_of_element_located(Locators.OVERLAY_CARREGANDO))
             wait.until(EC.element_to_be_clickable(Locators.BOTAO_LOCALIZAR)).click()
@@ -206,7 +209,9 @@ class ProtocolScraper:
             wait.until(EC.text_to_be_present_in_element(Locators.RESULTADO_FIELDSET, f"{year}/{number}"))
             content = driver.find_element(*Locators.RESULTADO_FIELDSET).text
 
-            if "Conforme andamento arquiva-se o protocolo." in content:
+            # Normalize content for robust matching
+            normalized_content = content.lower().replace(',', '').replace('.', '')
+            if "conforme andamento arquiva-se o protocolo" in normalized_content:
                 arquivado = "yes"
             
             last_update = find_and_format_dates(content)
@@ -233,7 +238,8 @@ class ProtocolScraper:
 
             wait.until(EC.presence_of_element_located(Locators.EXERCICIO_INPUT)).send_keys(str(year))
             wait.until(EC.presence_of_element_located(Locators.NUMERO_INPUT)).send_keys(str(number))
-            Select(wait.until(EC.presence_of_element_located(Locators.TIPO_PROTOCOLO_DROPDOWN))).select_by_index(9)
+            wait.until(EC.presence_of_element_located(Locators.VOLUME_INPUT)).send_keys(str(1))
+            Select(wait.until(EC.presence_of_element_located(Locators.TIPO_PROTOCOLO_DROPDOWN))).select_by_index(10)
             
             wait.until(EC.invisibility_of_element_located(Locators.OVERLAY_CARREGANDO))
             wait.until(EC.element_to_be_clickable(Locators.BOTAO_LOCALIZAR)).click()
@@ -358,21 +364,27 @@ async def main():
 
                 logging.info(f"Found {len(protocols_to_scrape)} protocols to scrape for {year}.")
                 all_newly_scraped[year] = protocols_to_scrape
-                
-                tasks = []
-                sem = asyncio.Semaphore(config.max_concurrent_tasks)
-                async def scrape_with_sem(protocol_number):
-                    async with sem:
-                        return await scraper.scrape_protocol(None, year, protocol_number)
 
-                for number in protocols_to_scrape:
-                    tasks.append(scrape_with_sem(number))
+                chunk_size = 1000
+                protocol_chunks = [protocols_to_scrape[i:i + chunk_size] for i in range(0, len(protocols_to_scrape), chunk_size)]
 
-                for future in asyncio_tqdm.as_completed(tasks, total=len(tasks), desc=f"Scraping {year}"):
-                    res_year, res_number, res_content, res_arquivado, res_last_update = await future
-                    if not res_last_update:
-                        res_last_update = datetime.now().strftime('%Y-%m-%d')
-                    db.insert_protocol(res_year, res_number, res_content, res_arquivado, res_last_update)
+                for i, chunk in enumerate(protocol_chunks):
+                    logging.info(f"--- Processing chunk {i+1}/{len(protocol_chunks)} for year {year} ({len(chunk)} protocols) ---")
+                    
+                    tasks = []
+                    sem = asyncio.Semaphore(config.max_concurrent_tasks)
+                    async def scrape_with_sem(protocol_number):
+                        async with sem:
+                            return await scraper.scrape_protocol(None, year, protocol_number)
+
+                    for number in chunk:
+                        tasks.append(scrape_with_sem(number))
+
+                    for future in asyncio_tqdm.as_completed(tasks, total=len(tasks), desc=f"Scraping {year} (chunk {i+1}/{len(protocol_chunks)})"):
+                        res_year, res_number, res_content, res_arquivado, res_last_update = await future
+                        if not res_last_update:
+                            res_last_update = datetime.now().strftime('%Y-%m-%d')
+                        db.insert_protocol(res_year, res_number, res_content, res_arquivado, res_last_update)
             
             # --- Analyze newly scraped protocols and generate Update.txt ---
             logging.info("Analyzing newly scraped protocols for keyword matches...")

@@ -3,7 +3,6 @@
     "log_file": "protocol_scraper.log",
     "base_url": "https://grp.blumenau.sc.gov.br/grp/acessoexterno/programaAcessoExterno.faces?codigo=670111",
     "hardcoded_years": {
-        "2020": 13627,
         "2021": 16971,
         "2022": 14141,
         "2023": 17109,
@@ -11,7 +10,7 @@
         "2025": 1
     },
     "current_year": 2025,
-    "max_concurrent_tasks": 25,
+    "max_concurrent_tasks": 10,
     "lista_original": [
         "AMABRE", "Bom Retiro", "Hermann Hering", "Recife", "Carijós",
         "Palhoça", "Augusto Otte", "Porto Alegre", "Ernesto Emmendoerfer", "Tiradentes", "Gertrud Gross Hering",

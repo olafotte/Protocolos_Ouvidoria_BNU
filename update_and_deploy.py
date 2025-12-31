@@ -2,16 +2,20 @@ import subprocess
 import sys
 import time
 
-def run_script(script_path, *args):
+def run_script(script_path, *args, timeout=None):
     """Executa um script Python e retorna True em sucesso, False em erro."""
     command = [sys.executable, script_path] + list(args)
     print(f"\n--- Executando: {' '.join(command)} ---")
     
     try:
         # O `check=True` faz com que uma exceção seja levantada se o script retornar um erro.
-        subprocess.run(command, check=True, capture_output=True, text=True)
+        subprocess.run(command, check=True, capture_output=True, text=True, timeout=timeout)
         print(f"--- Script '{script_path}' concluido com sucesso. ---")
         return True
+    except subprocess.TimeoutExpired:
+        print(f"!!! TIMEOUT ao executar o script '{script_path}' apos {timeout} segundos. !!!")
+        print("O processo foi finalizado. A proxima execucao ocorrera apos o periodo de espera.")
+        return False
     except subprocess.CalledProcessError as e:
         print(f"!!! ERRO ao executar o script '{script_path}'. !!!")
         print(f"Saida de erro:\n{e.stderr}")
@@ -23,22 +27,23 @@ def run_script(script_path, *args):
 def main():
     """Funcao principal que orquestra a execucao dos scripts."""
     scripts_to_run = [
-        ("enhanced_protocol_scraper.py", "scrape"),
-        ("setup_fts.py",),
-        ("deploy_db.py",)
+        {"path": "enhanced_protocol_scraper.py", "args": ["scrape"], "timeout": 360},  # 10 min
+        {"path": "setup_fts.py", "args": [], "timeout": None},
+        {"path": "deploy_db.py", "args": [], "timeout": None}
     ]
 
     print("Iniciando sequencia de atualizacao e deploy...")
 
     all_success = True
-    for i, script_info in enumerate(scripts_to_run):
+    for i, script_details in enumerate(scripts_to_run):
         print(f"\n[Passo {i+1}/{len(scripts_to_run)}]")
         
-        script_path = script_info[0]
-        script_args = script_info[1:]
+        path = script_details["path"]
+        args = script_details["args"]
+        timeout = script_details["timeout"]
         
-        if not run_script(script_path, *script_args):
-            print("\n!!! A sequencia foi interrompida devido a um erro. !!!")
+        if not run_script(path, *args, timeout=timeout):
+            print("\n!!! A sequencia foi interrompida devido a um erro ou timeout. !!!")
             all_success = False
             break
     
